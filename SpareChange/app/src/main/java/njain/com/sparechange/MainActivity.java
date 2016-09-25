@@ -2,6 +2,7 @@ package njain.com.sparechange;
 
 import android.app.ActionBar;
 import android.app.Notification;
+import android.os.AsyncTask;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
@@ -12,6 +13,17 @@ import android.view.View;
 import android.view.WindowManager;
 import android.widget.Toast;
 
+import org.apache.http.Header;
+import org.apache.http.HttpEntity;
+import org.apache.http.HttpResponse;
+import org.apache.http.client.ClientProtocolException;
+import org.apache.http.client.HttpClient;
+import org.apache.http.client.ResponseHandler;
+import org.apache.http.client.methods.HttpGet;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.entity.StringEntity;
+import org.apache.http.impl.client.BasicResponseHandler;
+import org.apache.http.impl.client.DefaultHttpClient;
 import org.opencv.android.BaseLoaderCallback;
 import org.opencv.android.CameraBridgeViewBase;
 import org.opencv.android.InstallCallbackInterface;
@@ -25,7 +37,17 @@ import org.opencv.core.Scalar;
 import org.opencv.core.Size;
 import org.opencv.imgproc.Imgproc;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.net.URL;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.zip.GZIPInputStream;
+
 
 public class MainActivity extends AppCompatActivity implements CameraBridgeViewBase.CvCameraViewListener2, View.OnTouchListener {
 
@@ -34,17 +56,23 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
 
     private Mat tempMat, circles; // holds images from opencv
 
-    private int radius, secondRadius; //holeRadius = 0;
-    private double smallestDiff = 1000;
-    private String whichOne;
+    private static final double DIME_RADIUS = 41; // 39-41
+    private static final double PENNY_RADIUS = 44; // 42-44
+    private static final double NICKEL_RADIUS = 48; // 45-48
+    private static final double QUARTER_RADIUS = 49; // 51-54
+
+    private int radius;
+    private double[] radii;
 
     private int iCannyUpperThreshold = 100;
-    private int iMinRadius = 40;
+    private int iMinRadius = 20;
     private int iMaxRadius = 400;
-    private double iAccumulator = 100;
+    private double iAccumulator = 140;
 
-    private static double[] RATIOS;
-
+    private int quarter = 0;
+    private int dime = 0;
+    private int nick = 0;
+    private int pennie = 0;
 
     // Listener anonymous class, handles callbacks
     private BaseLoaderCallback mLoaderCallback = new BaseLoaderCallback(this) {
@@ -84,20 +112,6 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         mCameraView.setCvCameraViewListener(this);
         mCameraView.setOnTouchListener(this);
 
-        RATIOS = new double[12];
-
-        RATIOS[0] = 0.781893;
-        RATIOS[1] = 1 / RATIOS[0];
-        RATIOS[2] = 1.06145251;
-        RATIOS[3] = 1 / RATIOS[2];
-        RATIOS[4] = 0.89622642;
-        RATIOS[5] = 1 / RATIOS[4];
-        RATIOS[6] = 0.87242798;
-        RATIOS[7] = 1 / RATIOS[6];
-        RATIOS[8] = 1.18435754;
-        RATIOS[9] = 1 / RATIOS[8];
-        RATIOS[10] = 0.73662551;
-        RATIOS[11] = 1 / RATIOS[10];
 
 
     } // end of onCreate
@@ -115,7 +129,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         mCameraView.setMaxFrameSize(600, 600);
 //        mCameraView.se
 
-    } // end of onResume
+    } // end of onResumeH
 
     @Override
     protected void onDestroy() {
@@ -151,19 +165,35 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         Imgproc.medianBlur(tempMat, tempMat, 5);
 //        Imgproc.GaussianBlur(tempMat, tempMat, new Size(9, 9), 2, 2);
         Imgproc.Canny(tempMat, tempMat, 100, 100);
-//        Imgproc.HoughCircles(tempMat, circles, Imgproc.HOUGH_GRADIENT, 69, 69);
-//        Imgproc.So
 
+////        Imgproc.threshold()
+//        double otsuThreshold = Imgproc.threshold(tempMat, circles, 0, 255, Imgproc.THRESH_BINARY_INV);
+//        double highThresh = Math.abs(otsuThreshold);
+//        double lowThres = Math.abs(0.5 * otsuThreshold);
 //
+//        Log.i("Threshold", Double.toString(highThresh) + " " + Double.toString(lowThres));
+//
+////        Imgproc.HoughCircles();
+//
+//        Imgproc.HoughCircles(tempMat, circles, Imgproc.CV_HOUGH_GRADIENT,
+//                1.66, 15, lowThres, highThresh,
+//                iMinRadius, iMaxRadius);
+
         Imgproc.HoughCircles(tempMat, circles, Imgproc.CV_HOUGH_GRADIENT,
                 2.0, 40, iCannyUpperThreshold, iAccumulator,
                 iMinRadius, iMaxRadius);
 
-        if (circles.cols() > 0)
-            for (int x = 0; x < circles.cols() ; x++) {
 
+        if (circles.cols() > 0) {
 
-                double vCircle[] = circles.get(0,x);
+            // to store the radii
+            radii = new double[circles.cols()];
+
+            Log.i("How Many",Integer.toString(circles.cols()));
+
+            for (int x = 0; x < circles.cols(); x++) {
+
+                double vCircle[] = circles.get(0, x);
 //                double vCircle2[] = circles.get(0, x + 1);
 
                 if (vCircle == null)
@@ -172,48 +202,118 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
                 Point pt = new Point(Math.round(vCircle[0]), Math.round(vCircle[1]));
 
                 radius = (int) Math.round(vCircle[2]);
-//                secondRadius = (int) Math.round(vCircle2[2]);
+                radii[x] = radius;
 
-                Log.d("FoundCircle", Integer.toString(radius));
-
-//                double ratio = radius / secondRadius;
-//                double smallestDiff = 1000;
-//
-//                for (int i = 0; i < RATIOS.length; i++) {
-//                    if (RATIOS[i] - ratio < smallestDiff) {
-//                        whichOne = Integer.toString(i);
-//                        smallestDiff = RATIOS[i] - ratio;
-//                    }
-//                }
-
-//                Log.d("PointyDick", whichOne);
-
-                Log.i("PointyDick", "xy" + pt.toString());
-                Log.i("PointyDick", "radius" + Integer.toString(radius));
                 // draw the found circle
-                Imgproc.circle(tempMat, pt, radius, new Scalar(255,0,0), 10); // circle
+                Imgproc.circle(tempMat, pt, radius, new Scalar(255, 0, 0), 10); // circle
                 Imgproc.circle(tempMat, pt, 3, new Scalar(255, 0, 0), 10);    // center of circle
-
 
 
             } // end of first for
 
 
-
+        }
 
         return tempMat;
     } // end of onCameraFrame
 
+    private void sendDataToServer(int quarters, int dimes, int nickels, int pennies) {
+
+        String url = "http://191ff262.ngrok.io/change/" + Integer.toString(quarters)
+               + "/" + Integer.toString(dimes) + "/"
+                + Integer.toString(nickels) + "/" + Integer.toString(pennies);
+
+        HttpResponse response = null;
+        try {
+            // Create http client object to send request to server
+            HttpClient client = new DefaultHttpClient();
+            // Create URL string
+            // Create Request to server and get response
+            HttpGet httpget= new HttpGet();
+            httpget.setURI(new URI(url));
+            response = client.execute(httpget);
+//            response.
+        } catch (URISyntaxException e) {
+            e.printStackTrace();
+        }
+        catch (ClientProtocolException e) {
+            // TODO Auto-generated catch block
+        } catch (IOException e) {
+            // TODO Auto-generated catch block
+        }
+
+    }
+
     @Override
     public boolean onTouch(View v, MotionEvent event) {
 
-        Log.i("MainActivity", "Touched");
+        Toast.makeText(MainActivity.this, "Analyzing", Toast.LENGTH_SHORT).show();
 
         switch (event.getAction()) {
-            case MotionEvent.ACTION_UP:
-                Toast.makeText(this, whichOne, Toast.LENGTH_SHORT).show();
+
+            case MotionEvent.ACTION_UP: {
+
+                quarter = 0;
+                dime = 0;
+                nick = 0;
+                pennie = 0;
+
+                for (double radicalthot : radii) {
+
+                    Log.i("Pesarvarmulthu",Double.toString(radicalthot));
+
+                    if (radicalthot <= DIME_RADIUS) {
+                        Log.i("Pesarvarmulthu", "dime");
+                        dime++;
+                    }
+                    else if (radicalthot <= PENNY_RADIUS && radicalthot > DIME_RADIUS) {
+                        Log.i("Pesarvarmulthu", "penny");
+                        pennie++;
+                    }
+                    else if (radicalthot <= NICKEL_RADIUS && radicalthot > PENNY_RADIUS) {
+                        Log.i("Pesarvarmulthu", "nickel");
+                        nick++;
+                    }
+                    else if (radicalthot >= QUARTER_RADIUS) {
+                        Log.i("Pesarvarmulthu", "quarter");
+                        quarter++;
+                    }
+
+                    SendGet get = new SendGet();
+                    get.execute();
+
+                }
+
+
+
+
+            } // end of case
+
         } // end of switch
 
         return true;
     }
+
+    // Do not read under any sircumstances
+    private class SendGet extends AsyncTask<Void, Void, String> {
+        @Override
+        protected String doInBackground(Void... params) {
+            sendDataToServer(quarter, dime, nick, pennie);
+            return null;
+        }
+
+        @Override
+        protected void onPostExecute(String result) {
+
+        }
+
+        @Override
+        protected void onPreExecute() {
+        }
+
+        @Override
+        protected void onProgressUpdate(Void... values) {
+        }
+    } // end of SendGet
+
 } // end of MainActivity
