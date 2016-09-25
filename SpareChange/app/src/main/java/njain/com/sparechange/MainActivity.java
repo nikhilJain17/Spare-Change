@@ -19,11 +19,14 @@ import org.opencv.android.JavaCameraView;
 import org.opencv.android.OpenCVLoader;
 import org.opencv.android.LoaderCallbackInterface;
 import org.opencv.core.Mat;
+import org.opencv.imgproc.Imgproc;
 
 public class MainActivity extends AppCompatActivity implements CameraBridgeViewBase.CvCameraViewListener2, View.OnTouchListener {
 
     private JavaCameraView mCameraView; // handler for the camera
     private OpenCVLoader mOpenCVLoader; // load opencv boi
+
+    private Mat tempMat;
 
     // Listener anonymous class, handles callbacks
     private BaseLoaderCallback mLoaderCallback = new BaseLoaderCallback(this) {
@@ -86,16 +89,16 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
             mCameraView.disableView();
     }
 
-
     @Override
     public void onCameraViewStarted(int width, int height) {
+        tempMat = new Mat();
         // Mat tempMat = new Mat();
         // tempMat.release() <-- java has auto garbage collection but c does not
     }
 
     @Override
     public void onCameraViewStopped() {
-        // tempMat.release()
+         tempMat.release();
     }
 
     @Override // when camera delivers a frame
@@ -103,7 +106,18 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
 
         // DO NOT INSTANTIATE MAT'S HERE! This is called everytime the camera delivers a frame.
 
-        return inputFrame.rgba();
+        tempMat = inputFrame.gray();
+
+        // edge detection!
+        Imgproc.Canny(tempMat, tempMat, 50, 100);
+//        Imgproc.dilate(tempMat, tempMat, tempMat)
+
+
+        // find contours in the edge map?
+
+//        tempMat.inv();
+
+        return tempMat;
     }
 
     @Override
