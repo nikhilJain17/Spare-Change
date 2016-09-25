@@ -22,6 +22,7 @@ import org.opencv.core.Core;
 import org.opencv.core.Mat;
 import org.opencv.core.Point;
 import org.opencv.core.Scalar;
+import org.opencv.core.Size;
 import org.opencv.imgproc.Imgproc;
 
 import java.util.ArrayList;
@@ -31,7 +32,19 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
     private JavaCameraView mCameraView; // handler for the camera
     private OpenCVLoader mOpenCVLoader; // load opencv boi
 
-    private Mat tempMat;
+    private Mat tempMat, circles; // holds images from opencv
+
+    private int radius, secondRadius; //holeRadius = 0;
+    private double smallestDiff = 1000;
+    private String whichOne;
+
+    private int iCannyUpperThreshold = 100;
+    private int iMinRadius = 40;
+    private int iMaxRadius = 400;
+    private double iAccumulator = 100;
+
+    private static double[] RATIOS;
+
 
     // Listener anonymous class, handles callbacks
     private BaseLoaderCallback mLoaderCallback = new BaseLoaderCallback(this) {
@@ -71,6 +84,21 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         mCameraView.setCvCameraViewListener(this);
         mCameraView.setOnTouchListener(this);
 
+        RATIOS = new double[12];
+
+        RATIOS[0] = 0.781893;
+        RATIOS[1] = 1 / RATIOS[0];
+        RATIOS[2] = 1.06145251;
+        RATIOS[3] = 1 / RATIOS[2];
+        RATIOS[4] = 0.89622642;
+        RATIOS[5] = 1 / RATIOS[4];
+        RATIOS[6] = 0.87242798;
+        RATIOS[7] = 1 / RATIOS[6];
+        RATIOS[8] = 1.18435754;
+        RATIOS[9] = 1 / RATIOS[8];
+        RATIOS[10] = 0.73662551;
+        RATIOS[11] = 1 / RATIOS[10];
+
 
     } // end of onCreate
 
@@ -84,6 +112,8 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,
                 WindowManager.LayoutParams.FLAG_FULLSCREEN);
 
+        mCameraView.setMaxFrameSize(600, 600);
+//        mCameraView.se
 
     } // end of onResume
 
@@ -97,6 +127,9 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
     @Override
     public void onCameraViewStarted(int width, int height) {
         tempMat = new Mat();
+        circles = new Mat();
+
+
         // Mat tempMat = new Mat();
         // tempMat.release() <-- java has auto garbage collection but c does not
     }
@@ -104,6 +137,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
     @Override
     public void onCameraViewStopped() {
          tempMat.release();
+        circles.release();
     }
 
     @Override // when camera delivers a frame
@@ -112,51 +146,63 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         // DO NOT INSTANTIATE MAT'S HERE! This is called everytime the camera delivers a frame.
 
         tempMat = inputFrame.gray();
-        Mat circles = new Mat();
 
         // edge detection!
+        Imgproc.medianBlur(tempMat, tempMat, 5);
+//        Imgproc.GaussianBlur(tempMat, tempMat, new Size(9, 9), 2, 2);
         Imgproc.Canny(tempMat, tempMat, 100, 100);
-        Imgproc.HoughCircles(tempMat, circles, Imgproc.HOUGH_GRADIENT, 69, 69);
+//        Imgproc.HoughCircles(tempMat, circles, Imgproc.HOUGH_GRADIENT, 69, 69);
+//        Imgproc.So
 
-        int iCannyUpperThreshold = 100;
-        int iMinRadius = 20;
-        int iMaxRadius = 400;
-        int iAccumulator = 300;
-
+//
         Imgproc.HoughCircles(tempMat, circles, Imgproc.CV_HOUGH_GRADIENT,
-                2.0, tempMat.rows() / 8, iCannyUpperThreshold, iAccumulator,
+                2.0, 40, iCannyUpperThreshold, iAccumulator,
                 iMinRadius, iMaxRadius);
 
         if (circles.cols() > 0)
-            for (int x = 0; x < circles.cols(); x++)
-            {
+            for (int x = 0; x < circles.cols() ; x++) {
+
+
                 double vCircle[] = circles.get(0,x);
+//                double vCircle2[] = circles.get(0, x + 1);
 
                 if (vCircle == null)
                     break;
 
                 Point pt = new Point(Math.round(vCircle[0]), Math.round(vCircle[1]));
-                int radius = (int)Math.round(vCircle[2]);
+
+                radius = (int) Math.round(vCircle[2]);
+//                secondRadius = (int) Math.round(vCircle2[2]);
+
+                Log.d("FoundCircle", Integer.toString(radius));
+
+//                double ratio = radius / secondRadius;
+//                double smallestDiff = 1000;
+//
+//                for (int i = 0; i < RATIOS.length; i++) {
+//                    if (RATIOS[i] - ratio < smallestDiff) {
+//                        whichOne = Integer.toString(i);
+//                        smallestDiff = RATIOS[i] - ratio;
+//                    }
+//                }
+
+//                Log.d("PointyDick", whichOne);
+
                 Log.i("PointyDick", "xy" + pt.toString());
                 Log.i("PointyDick", "radius" + Integer.toString(radius));
                 // draw the found circle
-                Imgproc.circle(tempMat, pt, radius, new Scalar(0,255,0), 10);
-                Imgproc.circle(tempMat, pt, 3, new Scalar(0, 0, 255), 10);
-            }
-
-//        if (circleMat != null)
-//            Imgproc.circle(tempMat, new Point(150, 150), 69, new Scalar(100, 100, 100));
-
-//        Imgproc.circle(tempMat, , , Imgproc.COLOR_BGR2BGR555);
-//        Imgproc.dilate(tempMat, tempMat, tempMat)
+                Imgproc.circle(tempMat, pt, radius, new Scalar(255,0,0), 10); // circle
+                Imgproc.circle(tempMat, pt, 3, new Scalar(255, 0, 0), 10);    // center of circle
 
 
-        // find contours in the edge map?
 
-//        tempMat.inv();
+            } // end of first for
+
+
+
 
         return tempMat;
-    }
+    } // end of onCameraFrame
 
     @Override
     public boolean onTouch(View v, MotionEvent event) {
@@ -165,7 +211,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
 
         switch (event.getAction()) {
             case MotionEvent.ACTION_UP:
-                Toast.makeText(this, "Analyzing", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, whichOne, Toast.LENGTH_SHORT).show();
         } // end of switch
 
         return true;
