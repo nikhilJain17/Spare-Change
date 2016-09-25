@@ -58,10 +58,11 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-
         mCameraView = (JavaCameraView) findViewById(R.id.CameraView);
         mCameraView.setVisibility(SurfaceView.VISIBLE);
         mCameraView.setCvCameraViewListener(this);
+        mCameraView.setOnTouchListener(this);
+
 
     } // end of onCreate
 
@@ -109,7 +110,6 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
     public boolean onTouch(View v, MotionEvent event) {
 
         Log.i("MainActivity", "Touched");
-
 
         switch (event.getAction()) {
             case MotionEvent.ACTION_UP:
